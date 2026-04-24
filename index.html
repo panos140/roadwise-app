@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RoadWise — Road Trip Planner</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F7F4EE;--surface:#fff;--surface2:#F0ECE4;--border:#E0D8CC;
+  --text:#1A1612;--text2:#6B6158;--text3:#9C9088;
+  --accent:#D4541A;--blue:#1A5FA5;--blue-light:#E6F1FB;
+  --green:#2D7A3A;--green-light:#EAF3DE;--red:#A32D2D;
+  --r:12px;--rs:8px;--sh:0 2px 12px rgba(0,0,0,.08);--shl:0 8px 32px rgba(0,0,0,.14);
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column}
+
+/* ── HEADER ── */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 1.5rem;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:1000;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:9px}
+.logo-icon{width:30px;height:30px;background:var(--accent);border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px}
+.logo-text{font-family:'DM Serif Display',serif;font-size:19px}
+.logo-text span{color:var(--accent)}
+.hactions{display:flex;align-items:center;gap:8px}
+
+/* ── BUTTONS ── */
+.btn{padding:7px 16px;border-radius:var(--rs);border:1px solid var(--border);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px}
+.btn:hover{background:var(--surface2);border-color:#C8B8A0}
+.btn-p{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-p:hover{background:#B8430F;border-color:#B8430F}
+.btn-sm{padding:5px 11px;font-size:12px}
+.btn-d{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-d:hover{background:#7A1F1F;border-color:#7A1F1F}
+
+/* ── LAYOUT ── */
+.main{display:grid;grid-template-columns:400px 1fr;flex:1;height:calc(100vh - 58px);overflow:hidden}
+.sidebar{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{flex:1;padding:13px 0;text-align:center;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.panel{display:none;flex:1;overflow-y:auto;padding:16px;flex-direction:column;gap:15px}
+.panel.active{display:flex}
+
+/* ── FORM ── */
+.slabel{font-size:10px;font-weight:700;letter-spacing:.9px;text-transform:uppercase;color:var(--text3);margin-bottom:7px}
+.card{background:var(--surface2);border-radius:var(--r);padding:14px;border:1px solid var(--border)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fg{display:flex;flex-direction:column;gap:5px}
+.fg label{font-size:12px;font-weight:500;color:var(--text2)}
+.fg input,.fg select,.fg textarea{padding:8px 11px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .15s;width:100%}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(212,84,26,.08)}
+.fg textarea{resize:none;height:58px;font-size:12px}
+.ferr{font-size:11px;color:var(--red);margin-top:2px;display:none}
+.ferr.show{display:block}
+
+/* ── SLIDER ── */
+.srow{display:flex;align-items:center;gap:10px;margin-top:3px}
+.srow input[type=range]{flex:1;-webkit-appearance:none;height:4px;border-radius:2px;background:var(--border);outline:none}
+.srow input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.sval{font-size:13px;font-weight:600;color:var(--accent);min-width:40px;text-align:right}
+
+/* ── TOGGLE ── */
+.trow{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border)}
+.trow:last-child{border-bottom:none}
+.tlabel span:first-child{font-size:13px;font-weight:500;display:block}
+.tlabel span:last-child{font-size:11px;color:var(--text3)}
+.tog{position:relative;width:34px;height:19px;flex-shrink:0}
+.tog input{opacity:0;width:0;height:0}
+.tslider{position:absolute;inset:0;background:var(--border);border-radius:20px;cursor:pointer;transition:background .2s}
+.tslider::before{content:'';position:absolute;width:13px;height:13px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s}
+.tog input:checked+.tslider{background:var(--accent)}
+.tog input:checked+.tslider::before{transform:translateX(15px)}
+
+/* ── CHIPS ── */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.chip{padding:4px 11px;border:1px solid var(--border);border-radius:20px;font-size:12px;font-weight:500;color:var(--text2);background:var(--surface);cursor:pointer;transition:all .15s;user-select:none}
+.chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+/* ── DEST TAGS ── */
+.dinrow{display:flex;gap:7px}
+.dinrow input{flex:1;padding:8px 11px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .15s}
+.dinrow input:focus{border-color:var(--accent)}
+.dtags{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+.dtag{display:flex;align-items:center;gap:5px;padding:4px 9px;background:var(--blue-light);border:1px solid #B5D4F4;border-radius:20px;font-size:12px;font-weight:500;color:var(--blue)}
+.dtag .x{cursor:pointer;opacity:.6;font-size:14px;line-height:1}
+.dtag .x:hover{opacity:1}
+
+/* ── MOOD ── */
+.moods{display:flex;gap:5px;margin-top:4px}
+.mood{flex:1;padding:7px 3px;border:1px solid var(--border);border-radius:var(--rs);background:var(--surface);cursor:pointer;font-size:10px;font-weight:500;text-align:center;color:var(--text2);transition:all .15s;line-height:1.4}
+.mood:hover{border-color:#C8B8A0;background:var(--surface2)}
+.mood.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.mood em{font-size:14px;display:block;margin-bottom:2px;font-style:normal}
+
+/* ── GENERATE ── */
+.genwrap{padding:12px 16px;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface)}
+.statusmsg{font-size:11px;color:var(--text3);text-align:center;min-height:15px;margin-bottom:5px}
+.genbtn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--r);font-family:'DM Serif Display',serif;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s}
+.genbtn:hover{background:#B8430F;transform:translateY(-1px);box-shadow:0 4px 16px rgba(212,84,26,.28)}
+.genbtn:active{transform:none}
+.genbtn:disabled{background:var(--text3);cursor:not-allowed;transform:none;box-shadow:none}
+.spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── MAP ── */
+.maparea{position:relative;display:flex;flex-direction:column}
+#map{flex:1;z-index:0}
+.maptb{position:absolute;top:14px;right:14px;z-index:500;display:flex;flex-direction:column;gap:7px}
+.mapbtn{width:38px;height:38px;background:#fff;border:1px solid var(--border);border-radius:var(--rs);box-shadow:var(--sh);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s}
+.mapbtn:hover{background:var(--surface2);box-shadow:var(--shl)}
+
+/* ── RESULT PANEL ── */
+.rpanel{position:absolute;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--border);max-height:220px;overflow-y:auto;z-index:400;display:none;box-shadow:0 -4px 20px rgba(0,0,0,.07)}
+.rpanel.show{display:block}
+.rheader{padding:11px 18px 8px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);position:sticky;top:0;background:#fff}
+.rtitle{font-family:'DM Serif Display',serif;font-size:15px}
+.mpill{font-size:11px;font-weight:500;padding:2px 9px;border-radius:20px;background:var(--green-light);color:var(--green);border:1px solid #C0DD97}
+.slist{padding:6px 18px}
+.sitem{display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid #F5F0E8;cursor:pointer}
+.sitem:last-child{border-bottom:none}
+.sitem:hover .sname{color:var(--accent)}
+.snum{width:20px;height:20px;border-radius:50%;color:#fff;font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px}
+.sname{font-size:13px;font-weight:500;transition:color .1s}
+.sdesc{font-size:11px;color:var(--text2);margin-top:1px}
+.stime{font-size:11px;font-weight:600;color:var(--text3);white-space:nowrap;text-align:right}
+
+/* ── EMPTY STATE ── */
+.mempty{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:100;pointer-events:none;padding:22px 28px;background:rgba(255,255,255,.94);border-radius:var(--r);border:1px dashed var(--border);box-shadow:var(--sh);width:250px}
+.mempty .ico{font-size:32px;margin-bottom:8px}
+.mempty h3{font-family:'DM Serif Display',serif;font-size:15px;margin-bottom:5px}
+.mempty p{font-size:12px;color:var(--text2);line-height:1.5}
+
+/* ── MODAL ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(20,15,10,.55);z-index:2000;align-items:center;justify-content:center}
+.overlay.show{display:flex}
+.modal{background:#fff;border-radius:var(--r);padding:28px;width:380px;max-width:95vw;box-shadow:var(--shl);animation:up .2s ease}
+@keyframes up{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}
+.modal h2{font-family:'DM Serif Display',serif;font-size:21px;margin-bottom:5px}
+.modal .sub{font-size:13px;color:var(--text2);margin-bottom:18px;line-height:1.5}
+.mfg{margin-bottom:11px}
+.mfoot{display:flex;gap:8px;margin-top:16px}
+.mfoot .btn{flex:1;justify-content:center}
+.mdiv{display:flex;align-items:center;gap:10px;margin:13px 0;color:var(--text3);font-size:12px}
+.mdiv::before,.mdiv::after{content:'';flex:1;height:1px;background:var(--border)}
+.gbtn{width:100%;padding:9px;border:1px solid var(--border);border-radius:var(--rs);background:#fff;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;display:flex;align-items:center;justify-content:center;gap:9px;transition:all .15s;color:var(--text)}
+.gbtn:hover{background:var(--surface2)}
+.mlink{text-align:center;margin-top:13px;font-size:12px;color:var(--text2)}
+.mlink a{color:var(--accent);cursor:pointer}
+.fmerr{font-size:12px;color:var(--red);margin-top:6px;display:none}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:22px;right:22px;background:var(--text);color:#fff;padding:11px 16px;border-radius:var(--rs);font-size:13px;font-weight:500;z-index:3000;opacity:0;transform:translateY(8px);transition:all .22s;pointer-events:none;max-width:300px;box-shadow:var(--shl)}
+.toast.show{opacity:1;transform:none}
+.toast.ok{background:#2D7A3A}
+.toast.err{background:#A32D2D}
+.toast.info{background:var(--blue)}
+
+/* ── SAVED TRIPS ── */
+.strip{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:11px;cursor:pointer;transition:all .15s;display:flex;align-items:flex-start;gap:10px;margin-bottom:8px}
+.strip:hover{border-color:var(--accent)}
+.sthumb{width:42px;height:42px;border-radius:var(--rs);background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.stname{font-size:13px;font-weight:600;margin-bottom:3px}
+.stmeta{font-size:11px;color:var(--text2)}
+
+/* ── USER ── */
+.uchip{display:flex;align-items:center;gap:7px}
+.uav{width:27px;height:27px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+.lprompt{background:var(--surface2);border:1px dashed var(--border);border-radius:var(--r);padding:18px;text-align:center}
+.lprompt p{font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.5}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:10px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🗺</div>
+    <span class="logo-text">Road<span>Wise</span></span>
+  </div>
+  <div class="hactions" id="hactions">
+    <button class="btn btn-sm" onclick="openM('login')">Log in</button>
+    <button class="btn btn-sm btn-p" onclick="openM('signup')">Sign up</button>
+  </div>
+</header>
+
+<div class="main">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('plan')">✦ Plan Trip</div>
+      <div class="tab" onclick="switchTab('saved')">◎ My Trips</div>
+    </div>
+
+    <!-- PLAN PANEL -->
+    <div class="panel active" id="tab-plan">
+      <div>
+        <div class="slabel">Destinations</div>
+        <div class="card">
+          <div class="fg" style="margin-bottom:10px">
+            <label>Starting point</label>
+            <input id="startPt" placeholder="e.g. Athens, Greece"/>
+          </div>
+          <div class="fg">
+            <label>Add stops / destinations</label>
+            <div class="dinrow">
+              <input id="dinput" placeholder="e.g. Delphi, Santorini..." onkeydown="if(event.key==='Enter')addDest()"/>
+              <button class="btn btn-sm" onclick="addDest()">+ Add</button>
+            </div>
+          </div>
+          <div class="dtags" id="dtags"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="slabel">Your Group</div>
+        <div class="card">
+          <div class="row2" style="margin-bottom:10px">
+            <div class="fg"><label>Adults</label><input type="number" id="adults" value="2" min="1" max="20"/></div>
+            <div class="fg"><label>Kids (under 12)</label><input type="number" id="kids" value="0" min="0" max="15"/></div>
+          </div>
+          <div class="fg">
+            <label>Vehicle</label>
+            <select id="vehicle">
+              <option value="car">🚗 Car</option>
+              <option value="suv">🚙 SUV / Crossover</option>
+              <option value="van">🚐 Minivan / Van</option>
+              <option value="rv">🏕 RV / Camper</option>
+              <option value="motorcycle">🏍 Motorcycle</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="slabel">Driving Preferences</div>
+        <div class="card">
+          <div class="fg" style="margin-bottom:12px">
+            <label>Max driving hours per day</label>
+            <div class="srow"><input type="range" min="1" max="14" value="6" step=".5" id="dhours" oninput="$('dhv').textContent=this.value+'h'"/><span class="sval" id="dhv">6h</span></div>
+          </div>
+          <div class="fg" style="margin-bottom:12px">
+            <label>Break every (hours)</label>
+            <div class="srow"><input type="range" min="1" max="5" value="2" step=".5" id="bev" oninput="$('bev2').textContent=this.value+'h'"/><span class="sval" id="bev2">2h</span></div>
+          </div>
+          <div class="fg">
+            <label>Break duration</label>
+            <div class="srow"><input type="range" min="10" max="60" value="20" step="5" id="bdur" oninput="$('bdv').textContent=this.value+'min'"/><span class="sval" id="bdv">20min</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="slabel">Comfort &amp; Breaks</div>
+        <div class="card">
+          <div class="trow"><div class="tlabel"><span>Restroom breaks</span><span>Dedicated stops</span></div><label class="tog"><input type="checkbox" id="restroom" checked><span class="tslider"></span></label></div>
+          <div class="trow"><div class="tlabel"><span>Meal stops</span><span>Lunch &amp; dinner</span></div><label class="tog"><input type="checkbox" id="meals" checked><span class="tslider"></span></label></div>
+          <div class="trow"><div class="tlabel"><span>Scenic detours</span><span>Short off-route stops</span></div><label class="tog"><input type="checkbox" id="scenic"><span class="tslider"></span></label></div>
+          <div class="trow"><div class="tlabel"><span>Pet-friendly stops</span><span>Pet exercise breaks</span></div><label class="tog"><input type="checkbox" id="pet"><span class="tslider"></span></label></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="slabel">Attractions &amp; Pace</div>
+        <div class="card">
+          <div class="fg" style="margin-bottom:12px">
+            <label>Attraction intensity (1 = relaxed · 10 = packed)</label>
+            <div class="srow"><input type="range" min="1" max="10" value="5" id="intens" oninput="$('iv').textContent=this.value"/><span class="sval" id="iv">5</span></div>
+          </div>
+          <div class="fg" style="margin-bottom:12px">
+            <label>Interests</label>
+            <div class="chips" id="chips">
+              <div class="chip on" onclick="tc(this)">🏛 History</div>
+              <div class="chip on" onclick="tc(this)">🌿 Nature</div>
+              <div class="chip" onclick="tc(this)">🍽 Food</div>
+              <div class="chip" onclick="tc(this)">🏖 Beach</div>
+              <div class="chip" onclick="tc(this)">🎨 Art</div>
+              <div class="chip" onclick="tc(this)">🛍 Shopping</div>
+              <div class="chip" onclick="tc(this)">⛪ Monuments</div>
+              <div class="chip" onclick="tc(this)">🏔 Adventure</div>
+              <div class="chip" onclick="tc(this)">👶 Kid-friendly</div>
+            </div>
+          </div>
+          <div class="fg">
+            <label>Trip pace</label>
+            <div class="moods">
+              <div class="mood" onclick="setMood(this,'chill')"><em>😴</em>Chill</div>
+              <div class="mood" onclick="setMood(this,'easy')"><em>😊</em>Easy</div>
+              <div class="mood on" onclick="setMood(this,'balanced')"><em>😎</em>Balanced</div>
+              <div class="mood" onclick="setMood(this,'active')"><em>⚡</em>Active</div>
+              <div class="mood" onclick="setMood(this,'packed')"><em>📋</em>Packed</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="slabel">Notes</div>
+        <div class="fg"><textarea id="notes" placeholder="Special needs, preferences... e.g. 'We have a baby', 'Prefer no highways', 'Love local markets'"></textarea></div>
+      </div>
+    </div>
+
+    <!-- SAVED PANEL -->
+    <div class="panel" id="tab-saved">
+      <div id="savedcontent"></div>
+    </div>
+
+    <div class="genwrap">
+      <div class="statusmsg" id="statusmsg"></div>
+      <button class="genbtn" id="genbtn" onclick="generateTrip()">
+        <span id="genlabel">Generate My Road Trip</span>
+        <span id="genarrow" style="font-size:17px">→</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div class="maparea">
+    <div id="map"></div>
+    <div class="mempty" id="mempty">
+      <div class="ico">🗺</div>
+      <h3>Your route will appear here</h3>
+      <p>Fill in your details and press Generate to see your personalized road trip plan.</p>
+    </div>
+    <div class="maptb">
+      <button class="mapbtn" onclick="dlMap()" title="Download / Print">⬇</button>
+      <button class="mapbtn" onclick="saveTrip()" title="Save trip">💾</button>
+      <button class="mapbtn" onclick="resetMap()" title="Clear">✕</button>
+    </div>
+    <div class="rpanel" id="rpanel">
+      <div class="rheader">
+        <div class="rtitle" id="rtitle">Road Trip Plan</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="mpill" id="rstats">—</div>
+          <button class="btn btn-sm" onclick="$('rpanel').classList.toggle('show')">−</button>
+        </div>
+      </div>
+      <div class="slist" id="slist"></div>
+    </div>
+  </div>
+</div>
+
+<!-- LOGIN MODAL -->
+<div class="overlay" id="loginModal" onclick="if(event.target===this)closeM('login')">
+  <div class="modal">
+    <h2>Welcome back</h2>
+    <p class="sub">Log in to save and access your road trips from anywhere.</p>
+    <button class="gbtn" onclick="googleSignIn()">
+      <svg width="17" height="17" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/><path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/></svg>
+      Continue with Google
+    </button>
+    <div class="mdiv">or continue with email</div>
+    <div class="fg mfg"><label>Email</label><input type="email" id="lemail" placeholder="you@email.com" onkeydown="if(event.key==='Enter')emailLogin()"/><span class="ferr" id="lemailerr">Please enter a valid email</span></div>
+    <div class="fg mfg"><label>Password</label><input type="password" id="lpass" placeholder="••••••••" onkeydown="if(event.key==='Enter')emailLogin()"/><span class="ferr" id="lpasserr">Password is required</span></div>
+    <div class="fmerr" id="lformerr"></div>
+    <div class="mfoot">
+      <button class="btn" onclick="closeM('login')">Cancel</button>
+      <button class="btn btn-p" onclick="emailLogin()">Log in</button>
+    </div>
+    <p class="mlink">Don't have an account? <a onclick="closeM('login');openM('signup')">Sign up free</a></p>
+  </div>
+</div>
+
+<!-- SIGNUP MODAL -->
+<div class="overlay" id="signupModal" onclick="if(event.target===this)closeM('signup')">
+  <div class="modal">
+    <h2>Create account</h2>
+    <p class="sub">Sign up to save, revisit and share your road trip plans.</p>
+    <button class="gbtn" onclick="googleSignIn()">
+      <svg width="17" height="17" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/><path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/></svg>
+      Sign up with Google
+    </button>
+    <div class="mdiv">or use email</div>
+    <div class="fg mfg"><label>Display name</label><input type="text" id="sname" placeholder="Your name"/><span class="ferr" id="snameerr">Name is required</span></div>
+    <div class="fg mfg"><label>Email</label><input type="email" id="semail" placeholder="you@email.com"/><span class="ferr" id="semailerr">Please enter a valid email</span></div>
+    <div class="fg mfg"><label>Password</label><input type="password" id="spass" placeholder="At least 6 characters"/><span class="ferr" id="spasserr">Password must be at least 6 characters</span></div>
+    <div class="fmerr" id="sformerr"></div>
+    <div class="mfoot">
+      <button class="btn" onclick="closeM('signup')">Cancel</button>
+      <button class="btn btn-p" onclick="emailSignup()">Create account</button>
+    </div>
+    <p class="mlink">Already have an account? <a onclick="closeM('signup');openM('login')">Log in</a></p>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- FIREBASE -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut, signInWithPopup, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
+import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBd9YS6nTnSgkYpuRKzaq96KACxERc7iFY",
+  authDomain: "roadwise-app-29ded.firebaseapp.com",
+  projectId: "roadwise-app-29ded",
+  storageBucket: "roadwise-app-29ded.firebasestorage.app",
+  messagingSenderId: "496485716476",
+  appId: "1:496485716476:web:c863a3a5e792a57ec2e279",
+  measurementId: "G-CJNM37SWC6"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
+
+// ── expose to window so non-module scripts can call ──
+window._fb = { auth, db, provider, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, signOut, signInWithPopup, GoogleAuthProvider, collection, addDoc, getDocs, deleteDoc, doc, query, where, orderBy };
+
+onAuthStateChanged(auth, user => {
+  window.currentUser = user;
+  renderHeader();
+  renderSaved();
+});
+</script>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+// ── UTILS ──
+const $ = id => document.getElementById(id);
+let map, routeLayers=[], markerLayers=[], currentTrip=null, mood='balanced', dests=[];
+
+// ── MAP ──
+function initMap(){
+  map = L.map('map',{zoomControl:false}).setView([39,22],7);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© <a href="https://openstreetmap.org">OpenStreetMap</a>',maxZoom:19}).addTo(map);
+  L.control.zoom({position:'bottomright'}).addTo(map);
+}
+
+// ── TOAST ──
+function toast(msg,type=''){
+  const t=$('toast'); t.textContent=msg; t.className='toast show'+(type?' '+type:'');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),3800);
+}
+function status(m){$('statusmsg').textContent=m}
+
+// ── TABS ──
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(t==='plan'&&i===0)||(t==='saved'&&i===1)));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  $('tab-'+t).classList.add('active');
+  if(t==='saved') renderSaved();
+}
+function tc(el){el.classList.toggle('on')}
+function setMood(el,m){document.querySelectorAll('.mood').forEach(b=>b.classList.remove('on'));el.classList.add('on');mood=m}
+function openM(t){$(t+'Modal').classList.add('show')}
+function closeM(t){
+  $(t+'Modal').classList.remove('show');
+  $(t+'Modal').querySelectorAll('input').forEach(i=>i.value='');
+  $(t+'Modal').querySelectorAll('.ferr').forEach(e=>e.classList.remove('show'));
+  const fe=$(t==='login'?'lformerr':'sformerr');
+  if(fe){fe.style.display='none';fe.textContent=''}
+}
+
+// ── DEST ──
+function addDest(){
+  const inp=$('dinput'), v=inp.value.trim(); if(!v) return;
+  if(dests.includes(v)){toast('Already added','info');return;}
+  dests.push(v); renderDests(); inp.value=''; inp.focus();
+}
+function removeDest(i){dests.splice(i,1);renderDests()}
+function renderDests(){
+  $('dtags').innerHTML=dests.map((d,i)=>`<div class="dtag"><span>📍 ${d}</span><span class="x" onclick="removeDest(${i})">×</span></div>`).join('');
+}
+
+// ── AUTH ──
+function isEmail(e){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)}
+
+async function googleSignIn(){
+  try{
+    const r = await window._fb.signInWithPopup(window._fb.auth, window._fb.provider);
+    closeM('login'); closeM('signup');
+    toast('Welcome, '+r.user.displayName.split(' ')[0]+'! 👋','ok');
+  } catch(e){ toast(friendlyErr(e),'err') }
+}
+
+async function emailSignup(){
+  const name=$('sname').value.trim(), email=$('semail').value.trim(), pass=$('spass').value;
+  let ok=true;
+  $('snameerr').classList.toggle('show',!name); if(!name) ok=false;
+  $('semailerr').classList.toggle('show',!isEmail(email)); if(!isEmail(email)) ok=false;
+  $('spasserr').classList.toggle('show',pass.length<6); if(pass.length<6) ok=false;
+  if(!ok) return;
+  const fe=$('sformerr'); fe.style.display='none';
+  try{
+    const cred = await window._fb.createUserWithEmailAndPassword(window._fb.auth, email, pass);
+    await window._fb.updateProfile(cred.user,{displayName:name});
+    window.currentUser = cred.user;
+    closeM('signup');
+    toast('Account created! Welcome, '+name+'! 🎉','ok');
+  } catch(e){ fe.textContent=friendlyErr(e); fe.style.display='block' }
+}
+
+async function emailLogin(){
+  const email=$('lemail').value.trim(), pass=$('lpass').value;
+  let ok=true;
+  $('lemailerr').classList.toggle('show',!isEmail(email)); if(!isEmail(email)) ok=false;
+  $('lpasserr').classList.toggle('show',!pass); if(!pass) ok=false;
+  if(!ok) return;
+  const fe=$('lformerr'); fe.style.display='none';
+  try{
+    const cred = await window._fb.signInWithEmailAndPassword(window._fb.auth, email, pass);
+    closeM('login');
+    toast('Welcome back, '+(cred.user.displayName||email.split('@')[0])+'! 👋','ok');
+  } catch(e){ fe.textContent=friendlyErr(e); fe.style.display='block' }
+}
+
+async function logout(){
+  await window._fb.signOut(window._fb.auth);
+  window.currentUser=null; renderHeader(); renderSaved();
+  toast('Logged out.','');
+}
+
+function friendlyErr(e){
+  const m=e.code||'';
+  if(m.includes('email-already')) return 'An account with this email already exists. Try logging in.';
+  if(m.includes('user-not-found')||m.includes('invalid-credential')) return 'No account found or wrong password. Check your details.';
+  if(m.includes('wrong-password')) return 'Incorrect password. Please try again.';
+  if(m.includes('weak-password')) return 'Password must be at least 6 characters.';
+  if(m.includes('invalid-email')) return 'Please enter a valid email address.';
+  if(m.includes('popup-closed')) return 'Sign-in window closed. Please try again.';
+  return e.message||'Something went wrong. Please try again.';
+}
+
+function avatarColor(n){
+  const c=['#D4541A','#1A5FA5','#2D7A3A','#7B5EA7','#C47A1B'];
+  let h=0; for(const ch of (n||'A')) h=((h<<5)-h)+ch.charCodeAt(0); return c[Math.abs(h)%c.length];
+}
+
+function renderHeader(){
+  const ha=$('hactions'), u=window.currentUser;
+  if(u){
+    const col=avatarColor(u.displayName||u.email);
+    const ini=((u.displayName||u.email)||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const name=(u.displayName||u.email.split('@')[0]).split(' ')[0];
+    ha.innerHTML=`<div class="uchip"><div class="uav" style="background:${col}">${ini}</div><span style="font-size:13px;font-weight:500">${name}</span></div><button class="btn btn-sm" onclick="logout()">Log out</button>`;
+  } else {
+    ha.innerHTML=`<button class="btn btn-sm" onclick="openM('login')">Log in</button><button class="btn btn-sm btn-p" onclick="openM('signup')">Sign up</button>`;
+  }
+}
+
+// ── SAVED TRIPS (Firestore) ──
+const EMOJIS=['🗺','🚗','⛰','🏖','🌿','🏛','🌄','🏕','🚙','🌊','🏝','🗻'];
+
+async function renderSaved(){
+  const c=$('savedcontent'), u=window.currentUser;
+  if(!u){
+    c.innerHTML=`<div class="lprompt"><p>Log in or sign up to save your road trips and access them anywhere.</p><button class="btn btn-p" style="width:100%;justify-content:center" onclick="openM('login')">Log in to see saved trips</button></div>`;
+    return;
+  }
+  c.innerHTML=`<div style="text-align:center;padding:20px;color:var(--text3);font-size:12px">Loading trips...</div>`;
+  try{
+    const {db,collection,query,where,orderBy,getDocs}=window._fb;
+    const q=query(collection(db,'trips'),where('uid','==',u.uid));
+    const snap=await getDocs(q);
+    const trips=[]; snap.forEach(d=>trips.push({id:d.id,...d.data()}));
+    trips.sort((a,b)=>b.savedAt-a.savedAt);
+    if(!trips.length){
+      c.innerHTML=`<div class="lprompt"><p>No saved trips yet.<br>Generate a route and press 💾 to save it!</p></div>`;
+      return;
+    }
+    c.innerHTML=trips.map((t,i)=>`
+      <div class="strip" onclick="loadTrip('${t.id}',${JSON.stringify(t).replace(/'/g,"&#39;")})">
+        <div class="sthumb">${EMOJIS[i%EMOJIS.length]}</div>
+        <div style="flex:1">
+          <div class="stname">${t.title}</div>
+          <div class="stmeta">${t.stops} stops${t.km?' · '+t.km+'km':''} · ${new Date(t.savedAt).toLocaleDateString()}</div>
+        </div>
+        <button class="btn btn-sm btn-d" onclick="event.stopPropagation();delTrip('${t.id}')">✕</button>
+      </div>`).join('');
+  } catch(e){ c.innerHTML=`<div class="lprompt"><p style="color:var(--red)">Could not load trips: ${e.message}</p></div>`; }
+}
+
+async function saveTrip(){
+  if(!currentTrip){toast('Generate a trip first!','err');return;}
+  const u=window.currentUser;
+  if(!u){openM('login');toast('Log in to save trips','info');return;}
+  try{
+    const {db,collection,addDoc}=window._fb;
+    await addDoc(collection(db,'trips'),{
+      uid:u.uid,
+      title:currentTrip.tripData.title||'My Road Trip',
+      stops:currentTrip.tripData.stops?.length||0,
+      km:currentTrip.tripData.totalKm||null,
+      savedAt:Date.now(),
+      data:currentTrip
+    });
+    toast('Trip saved! 💾','ok');
+    renderSaved();
+  } catch(e){ toast('Save failed: '+e.message,'err') }
+}
+
+function loadTrip(id, t){
+  try{
+    const data = typeof t === 'string' ? JSON.parse(t) : t;
+    currentTrip=data.data; renderMap(data.data.tripData); switchTab('plan');
+    toast('Trip loaded! 🗺','ok');
+  } catch(e){ toast('Could not load trip','err') }
+}
+
+async function delTrip(id){
+  try{
+    const {db,doc,deleteDoc}=window._fb;
+    await deleteDoc(doc(db,'trips',id));
+    toast('Trip deleted.','');
+    renderSaved();
+  } catch(e){ toast('Delete failed: '+e.message,'err') }
+}
+
+// ── GENERATE — Pollinations AI (GET, no key needed) ──
+async function generateTrip(){
+  const start=$('startPt').value.trim();
+  if(!start){toast('Please enter a starting point','err');return;}
+  if(!dests.length){toast('Please add at least one destination','err');return;}
+
+  const btn=$('genbtn'); btn.disabled=true;
+  $('genlabel').textContent='Planning your trip...';
+  $('genarrow').outerHTML='<div class="spin" id="genspin"></div>';
+
+  const steps=['Geocoding locations...','Finding attractions...','Building your route...','Finalizing schedule...'];
+  let mi=0; const iv=setInterval(()=>status(steps[Math.min(mi++,steps.length-1)]),2200);
+
+  const cfg={
+    start, dests,
+    adults:+$('adults').value, kids:+$('kids').value,
+    vehicle:$('vehicle').value,
+    driveHours:$('dhours').value, breakEvery:$('bev').value, breakDur:$('bdur').value,
+    restroom:$('restroom').checked, meals:$('meals').checked,
+    scenic:$('scenic').checked, pet:$('pet').checked,
+    intensity:+$('intens').value, mood,
+    cats:[...$('chips').querySelectorAll('.chip.on')].map(c=>c.textContent.trim()),
+    notes:$('notes').value
+  };
+
+  try{
+    const data=await callAI(cfg);
+    renderMap(data);
+    currentTrip={cfg,tripData:data};
+    toast('Route ready! Click any stop for details. 🎉','ok');
+    status('');
+  } catch(e){
+    toast(e.message,'err');
+    status('Generation failed — try again');
+    console.error(e);
+  }
+  clearInterval(iv);
+  btn.disabled=false;
+  $('genlabel').textContent='Generate My Road Trip';
+  const sp=$('genspin'); if(sp) sp.outerHTML='<span id="genarrow" style="font-size:17px">→</span>';
+}
+
+async function callAI(cfg){
+  const moodDesc={chill:'very relaxed, 1-2 stops per day',easy:'relaxed, 3-4 stops',balanced:'balanced mix, 5-6 stops',active:'active, 7-8 stops',packed:'maximum sightseeing, 9+ stops'};
+  const nStops=Math.round(4+cfg.intensity*1.2);
+  const cats=cfg.cats.join(', ')||'general sightseeing';
+
+  // Build a concise prompt — keep it short for GET URL
+  const prompt = `Plan a road trip. Start: ${cfg.start}. Go to: ${cfg.dests.join(', ')}. Group: ${cfg.adults} adults, ${cfg.kids} kids, vehicle: ${cfg.vehicle}. Drive max ${cfg.driveHours}h/day, break every ${cfg.breakEvery}h for ${cfg.breakDur}min. Restroom stops: ${cfg.restroom}. Meal stops: ${cfg.meals}. Scenic: ${cfg.scenic}. Pet stops: ${cfg.pet}. Pace: ${moodDesc[cfg.mood]||'balanced'}. Intensity ${cfg.intensity}/10. Interests: ${cats}. Notes: ${cfg.notes||'none'}.
+
+Reply ONLY with valid JSON (no markdown, no text outside JSON):
+{"title":"Trip Name","totalDays":2,"totalKm":320,"stops":[{"type":"start","name":"City","description":"Departure","duration":"0 min","lat":37.97,"lng":23.72,"time":"8:00 AM"},{"type":"attraction","name":"Place","description":"What to see","duration":"2 hours","lat":38.5,"lng":22.5,"time":"10:00 AM"},{"type":"break","name":"Rest Stop","description":"Stretch break","duration":"20 min","lat":38.2,"lng":22.9,"time":"12:30 PM"},{"type":"meal","name":"Lunch","description":"Local food","duration":"1 hour","lat":38.3,"lng":22.7,"time":"1:00 PM"},{"type":"destination","name":"Main City","description":"Highlight","duration":"3 hours","lat":38.9,"lng":22.1,"time":"4:00 PM"}]}
+
+Use REAL accurate GPS coordinates. Include ~${nStops} stops. Types: start, attraction, break, meal, rest, overnight, destination.`;
+
+  // Try multiple Pollinations endpoints in sequence
+  const encodedPrompt = encodeURIComponent(prompt);
+
+  // Attempt 1: text.pollinations.ai GET with system param
+  const urls = [
+    `https://text.pollinations.ai/${encodedPrompt}?model=openai&json=true&seed=${Math.floor(Math.random()*9999)}`,
+    `https://text.pollinations.ai/${encodedPrompt}?model=mistral&json=true`,
+    `https://text.pollinations.ai/${encodedPrompt}?model=openai`,
+  ];
+
+  let lastErr = null;
+  for(const url of urls){
+    try{
+      const resp = await fetch(url, {
+        method:'GET',
+        signal: AbortSignal.timeout(45000)
+      });
+      if(!resp.ok) { lastErr=new Error(`HTTP ${resp.status}`); continue; }
+      const text = await resp.text();
+      const parsed = extractJSON(text);
+      if(!parsed) { lastErr=new Error('No JSON in response'); continue; }
+      if(!parsed.stops||!parsed.stops.length) { lastErr=new Error('No stops in response'); continue; }
+      // Validate coords
+      const valid=parsed.stops.filter(s=>s.lat&&s.lng&&!isNaN(+s.lat)&&!isNaN(+s.lng));
+      if(!valid.length) { lastErr=new Error('No valid coordinates'); continue; }
+      parsed.stops=valid;
+      return parsed;
+    } catch(e){ lastErr=e; continue; }
+  }
+
+  // Final fallback: POST to text.pollinations.ai
+  try{
+    const resp=await fetch('https://text.pollinations.ai/',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        messages:[
+          {role:'system',content:'You are a road trip planner. Reply ONLY with valid JSON, no markdown, no extra text.'},
+          {role:'user',content:prompt}
+        ],
+        model:'openai',
+        jsonMode:true,
+        seed:Math.floor(Math.random()*9999)
+      }),
+      signal:AbortSignal.timeout(50000)
+    });
+    const text=await resp.text();
+    const parsed=extractJSON(text);
+    if(parsed&&parsed.stops&&parsed.stops.length) return parsed;
+  } catch(e){ lastErr=e; }
+
+  throw new Error('AI generation failed — please check your internet and try again. ('+( lastErr?.message||'unknown')+')');
+}
+
+function extractJSON(text){
+  try{
+    // Strip markdown fences
+    let s=text.replace(/```json|```/g,'').trim();
+    // Find outermost JSON object
+    const i=s.indexOf('{'), j=s.lastIndexOf('}');
+    if(i===-1||j===-1) return null;
+    return JSON.parse(s.slice(i,j+1));
+  } catch{ return null; }
+}
+
+// ── MAP RENDER ──
+const TCOLOR={start:'#2D7A3A',destination:'#D4541A',attraction:'#1A5FA5',break:'#7B5EA7',meal:'#C47A1B',rest:'#2D7A3A',overnight:'#3D3D3D'};
+const TICON={start:'🚗',destination:'📍',attraction:'⭐',break:'☕',meal:'🍽',rest:'🚻',overnight:'🏨'};
+
+function renderMap(data){
+  clearMap();
+  $('mempty').style.display='none';
+  const stops=(data.stops||[]).filter(s=>s.lat&&s.lng&&!isNaN(+s.lat)&&!isNaN(+s.lng));
+  if(!stops.length){toast('No valid coordinates — try again','err');$('mempty').style.display='block';return;}
+  const coords=stops.map(s=>[+s.lat,+s.lng]);
+  const line=L.polyline(coords,{color:'#1A5FA5',weight:4,opacity:.82,lineJoin:'round',lineCap:'round'}).addTo(map);
+  const dash=L.polyline(coords,{color:'#fff',weight:2,opacity:.3,dashArray:'8 14',lineJoin:'round'}).addTo(map);
+  routeLayers=[line,dash];
+  stops.forEach((s,i)=>{
+    const col=TCOLOR[s.type]||'#D4541A', ico=TICON[s.type]||'📍';
+    const icon=L.divIcon({
+      className:'',
+      html:`<div style="width:34px;height:34px;background:${col};border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 2px 10px rgba(0,0,0,.22);position:relative">${ico}<div style="position:absolute;top:-7px;right:-7px;width:16px;height:16px;background:#fff;border:2px solid ${col};border-radius:50%;font-size:8px;font-weight:700;display:flex;align-items:center;justify-content:center;color:${col}">${i+1}</div></div>`,
+      iconSize:[34,34],iconAnchor:[17,17]
+    });
+    const m=L.marker([+s.lat,+s.lng],{icon}).addTo(map).bindPopup(
+      `<div style="font-family:'DM Sans',sans-serif;min-width:190px"><b style="font-size:13px">${ico} ${s.name}</b><p style="font-size:12px;color:#666;margin:5px 0 8px;line-height:1.5">${s.description}</p><span style="font-size:11px;background:#f5f0e8;padding:2px 8px;border-radius:10px;margin-right:5px">⏱ ${s.duration}</span><span style="font-size:11px;background:#f5f0e8;padding:2px 8px;border-radius:10px">🕐 ${s.time}</span></div>`,
+      {maxWidth:240}
+    );
+    markerLayers.push(m);
+  });
+  map.fitBounds(L.polyline(coords).getBounds(),{padding:[50,50]});
+  $('slist').innerHTML=stops.map((s,i)=>`
+    <div class="sitem" onclick="map.setView([${+s.lat},${+s.lng}],14,{animate:true})">
+      <div class="snum" style="background:${TCOLOR[s.type]||'#D4541A'}">${i+1}</div>
+      <div style="flex:1"><div class="sname">${TICON[s.type]||'📍'} ${s.name}</div><div class="sdesc">${s.description}</div></div>
+      <div class="stime">${s.time}<br><span style="font-size:10px;color:var(--text3)">${s.duration}</span></div>
+    </div>`).join('');
+  $('rpanel').classList.add('show');
+  $('rtitle').textContent=data.title||'Road Trip Plan';
+  $('rstats').textContent=`${stops.length} stops · ${data.totalKm||'?'}km · ${data.totalDays||1} day${data.totalDays>1?'s':''}`;
+}
+
+function clearMap(){
+  routeLayers.forEach(l=>map.removeLayer(l)); routeLayers=[];
+  markerLayers.forEach(m=>map.removeLayer(m)); markerLayers=[];
+}
+function resetMap(){
+  clearMap(); $('mempty').style.display='block';
+  $('rpanel').classList.remove('show'); currentTrip=null;
+}
+
+// ── DOWNLOAD ──
+function dlMap(){
+  if(!currentTrip){toast('Generate a trip first!','info');return;}
+  const c=map.getCenter(),z=map.getZoom();
+  const stops=currentTrip.tripData.stops||[];
+  const coords=JSON.stringify(stops.filter(s=>s.lat&&s.lng).map(s=>[+s.lat,+s.lng]));
+  const title=(currentTrip.tripData.title||'Road Trip').replace(/"/g,'');
+  const w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/><style>body{margin:0}#m{height:100vh;width:100vw}.info{position:fixed;top:12px;left:12px;background:rgba(255,255,255,.95);padding:12px 16px;border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.15);font-family:sans-serif;z-index:1000}.info h3{margin:0 0 4px;font-size:15px}.info p{margin:0;color:#666;font-size:11px}</style></head><body><div id="m"></div><div class="info"><h3>🗺 ${title}</h3><p>${stops.length} stops · ${currentTrip.tripData.totalKm||'?'}km</p></div><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script><script>var m=L.map('m',{zoomControl:false}).setView([${c.lat},${c.lng}],${z});L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(m);var c=${coords};if(c.length){L.polyline(c,{color:'#1A5FA5',weight:4,opacity:.82}).addTo(m);c.forEach(function(p,i){L.circleMarker(p,{radius:8,fillColor:'#D4541A',color:'#fff',weight:2,fillOpacity:1}).addTo(m);});}setTimeout(function(){window.print();},1800);<\/script></body></html>`);
+  w.document.close();
+  toast('Opening print dialog — use "Save as PDF" 🖨','info');
+}
+
+// ── INIT ──
+initMap();
+</script>
+</body>
+</html>
