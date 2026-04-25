@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RoadWise — Road Trip Planner</title>
+<script src="https://js.puter.com/v2/"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -655,124 +656,111 @@ async function generateTrip(){
   const sp=$('genspin'); if(sp) sp.outerHTML='<span id="genarrow" style="font-size:17px">→</span>';
 }
 
-async function callAI(cfg){
-  const moodDesc={chill:'very relaxed, max 2 attractions per day',easy:'relaxed pace, 3-4 stops',balanced:'balanced mix of driving and sightseeing, 5-6 stops',active:'active schedule, 7-8 stops',packed:'maximum sightseeing, 9+ stops per day'};
-  const nStops=Math.round(4+cfg.intensity*1.2);
-  const cats=cfg.cats.join(', ')||'general sightseeing';
+// Build the shared prompt used by all AI backends
+function buildPrompt(cfg) {
+  const moodDesc = {
+    chill:'very relaxed, max 2 attractions per day',
+    easy:'relaxed pace, 3-4 stops per day',
+    balanced:'balanced mix of driving and sightseeing, 5-6 stops',
+    active:'active schedule, 7-8 stops per day',
+    packed:'maximum sightseeing, 9+ stops per day'
+  };
+  const nStops = Math.round(4 + cfg.intensity * 1.2);
+  const cats = cfg.cats.join(', ') || 'general sightseeing';
 
-  const systemMsg = 'You are an expert road trip planner. You ONLY respond with valid raw JSON. No markdown, no code fences, no explanation. Just the JSON object.';
-
-  const userMsg = `Plan a road trip with these details:
+  return {
+    system: 'You are an expert road trip planner. Respond ONLY with a valid raw JSON object. No markdown, no code fences, no explanation — just the JSON.',
+    user: `Plan a road trip:
 - Start: ${cfg.start}
-- Stops in order: ${cfg.dests.join(' → ')}
+- Destinations in order: ${cfg.dests.join(' → ')}
 - Group: ${cfg.adults} adults, ${cfg.kids} kids, vehicle: ${cfg.vehicle}
-- Max driving: ${cfg.driveHours}h/day, break every ${cfg.breakEvery}h for ${cfg.breakDur}min
-- Include restroom stops: ${cfg.restroom}
-- Include meal stops: ${cfg.meals}
-- Scenic detours: ${cfg.scenic}
-- Pet-friendly stops: ${cfg.pet}
-- Pace: ${moodDesc[cfg.mood]||'balanced'}
-- Attraction intensity: ${cfg.intensity}/10
-- Interests: ${cats}
-- Special notes: ${cfg.notes||'none'}
+- Max driving: ${cfg.driveHours}h/day. Break every ${cfg.breakEvery}h for ${cfg.breakDur}min.
+- Restroom stops: ${cfg.restroom}. Meal stops: ${cfg.meals}. Scenic detours: ${cfg.scenic}. Pet stops: ${cfg.pet}.
+- Pace: ${moodDesc[cfg.mood]||'balanced'}. Intensity: ${cfg.intensity}/10. Interests: ${cats}.
+- Notes: ${cfg.notes||'none'}
 
-Return ONLY this JSON (no markdown, no text before or after):
-{
-  "title": "Creative trip name",
-  "totalDays": 2,
-  "totalKm": 320,
-  "stops": [
-    {"type":"start","name":"Athens, Greece","description":"Departure from Athens","duration":"0 min","lat":37.9795,"lng":23.7162,"time":"8:00 AM"},
-    {"type":"attraction","name":"Acropolis","description":"Ancient citadel with the Parthenon","duration":"2 hours","lat":37.9715,"lng":23.7267,"time":"9:00 AM"},
-    {"type":"break","name":"Motorway Rest Stop","description":"Stretch and restroom break","duration":"20 min","lat":38.2,"lng":23.1,"time":"11:30 AM"},
-    {"type":"meal","name":"Lunch in Levadia","description":"Local taverna for traditional Greek food","duration":"1 hour","lat":38.4339,"lng":22.8731,"time":"1:00 PM"},
-    {"type":"destination","name":"Delphi","description":"Ancient sanctuary of Apollo","duration":"3 hours","lat":38.4824,"lng":22.5011,"time":"3:00 PM"}
-  ]
+Return ONLY valid JSON like this (no extra text):
+{"title":"Creative Trip Name","totalDays":2,"totalKm":320,"stops":[
+{"type":"start","name":"Athens, Greece","description":"Departure point","duration":"0 min","lat":37.9795,"lng":23.7162,"time":"8:00 AM"},
+{"type":"attraction","name":"Acropolis","description":"Ancient citadel with the Parthenon","duration":"2 hours","lat":37.9715,"lng":23.7267,"time":"9:00 AM"},
+{"type":"break","name":"Rest Stop","description":"Stretch break","duration":"20 min","lat":38.2,"lng":23.1,"time":"11:30 AM"},
+{"type":"meal","name":"Lunch in Levadia","description":"Local taverna","duration":"1 hour","lat":38.4339,"lng":22.8731,"time":"1:00 PM"},
+{"type":"destination","name":"Delphi","description":"Ancient sanctuary of Apollo","duration":"3 hours","lat":38.4824,"lng":22.5011,"time":"3:00 PM"}
+]}
+
+Rules: real accurate GPS coords, ~${nStops} stops, types: start/attraction/break/meal/rest/overnight/destination.`
+  };
 }
 
-RULES:
-- Use REAL, accurate GPS coordinates for every location
-- Include exactly ~${nStops} stops total
-- Types allowed: start, attraction, break, meal, rest, overnight, destination
-- Make the route geographically logical`;
+function validateTrip(parsed) {
+  if (!parsed || !Array.isArray(parsed.stops) || !parsed.stops.length) return null;
+  parsed.stops = parsed.stops.filter(s => s.lat && s.lng && !isNaN(+s.lat) && !isNaN(+s.lng) && Math.abs(+s.lat) <= 90 && Math.abs(+s.lng) <= 180);
+  return parsed.stops.length ? parsed : null;
+}
 
-  // ── ATTEMPT 1: POST to https://text.pollinations.ai/openai (OpenAI-compatible)
+async function callAI(cfg) {
+  const { system, user } = buildPrompt(cfg);
+
+  // ── ATTEMPT 1: Puter.js — free, open-source, no login needed ──
+  // Uses GPT-4o-mini via puter.com's "User-Pays" model (each user pays their own tiny usage)
   try {
-    status('Connecting to AI...');
+    status('Connecting to AI (Puter.js)...');
+    if (typeof puter !== 'undefined') {
+      const resp = await puter.ai.chat(
+        [{ role: 'system', content: system }, { role: 'user', content: user }],
+        { model: 'gpt-4o-mini' }
+      );
+      // Puter returns either a string or {message:{content:[{text}]}}
+      let raw = '';
+      if (typeof resp === 'string') raw = resp;
+      else if (resp?.message?.content?.[0]?.text) raw = resp.message.content[0].text;
+      else if (resp?.text) raw = resp.text;
+      else raw = JSON.stringify(resp);
+      const parsed = validateTrip(extractJSON(raw));
+      if (parsed) { console.log('✅ Puter.js succeeded'); return parsed; }
+    }
+  } catch(e) { console.warn('Puter.js failed:', e.message); }
+
+  // ── ATTEMPT 2: Puter.js with Gemini 2.0 Flash (different model, same free library) ──
+  try {
+    status('Trying Gemini via Puter.js...');
+    if (typeof puter !== 'undefined') {
+      const resp = await puter.ai.chat(
+        [{ role: 'system', content: system }, { role: 'user', content: user }],
+        { model: 'google/gemini-2.0-flash' }
+      );
+      let raw = '';
+      if (typeof resp === 'string') raw = resp;
+      else if (resp?.message?.content) raw = typeof resp.message.content === 'string' ? resp.message.content : resp.message.content?.[0]?.text || '';
+      else raw = JSON.stringify(resp);
+      const parsed = validateTrip(extractJSON(raw));
+      if (parsed) { console.log('✅ Puter Gemini succeeded'); return parsed; }
+    }
+  } catch(e) { console.warn('Puter Gemini failed:', e.message); }
+
+  // ── ATTEMPT 3: Pollinations /openai POST (backup) ──
+  try {
+    status('Trying Pollinations AI...');
     const resp = await fetch('https://text.pollinations.ai/openai', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model: 'openai',
-        messages: [
-          { role: 'system', content: systemMsg },
-          { role: 'user', content: userMsg }
-        ],
+        messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
         temperature: 0.7,
         seed: Math.floor(Math.random() * 99999)
       }),
-      signal: AbortSignal.timeout(60000)
+      signal: AbortSignal.timeout(55000)
     });
     if (resp.ok) {
       const json = await resp.json();
-      // OpenAI-style response: choices[0].message.content
-      const content = json?.choices?.[0]?.message?.content || json?.text || '';
-      const parsed = extractJSON(content);
-      if (parsed && parsed.stops && parsed.stops.length) {
-        parsed.stops = parsed.stops.filter(s => s.lat && s.lng && !isNaN(+s.lat) && !isNaN(+s.lng));
-        if (parsed.stops.length) return parsed;
-      }
+      const content = json?.choices?.[0]?.message?.content || '';
+      const parsed = validateTrip(extractJSON(content));
+      if (parsed) { console.log('✅ Pollinations succeeded'); return parsed; }
     }
-  } catch(e) { console.warn('Attempt 1 failed:', e.message); }
+  } catch(e) { console.warn('Pollinations failed:', e.message); }
 
-  // ── ATTEMPT 2: GET https://text.pollinations.ai/{prompt}?json=true
-  try {
-    status('Trying alternate endpoint...');
-    const shortPrompt = encodeURIComponent(
-      `Plan road trip from ${cfg.start} to ${cfg.dests.join(', ')}. ${cfg.adults} adults, ${cfg.kids} kids. Max ${cfg.driveHours}h driving/day. Intensity ${cfg.intensity}/10. Interests: ${cats}. Reply ONLY with JSON: {"title":"...","totalDays":N,"totalKm":N,"stops":[{"type":"start|attraction|break|meal|destination","name":"...","description":"...","duration":"...","lat":0.0,"lng":0.0,"time":"..."}]}`
-    );
-    const resp = await fetch(
-      `https://text.pollinations.ai/${shortPrompt}?model=openai&json=true&seed=${Math.floor(Math.random()*9999)}`,
-      { signal: AbortSignal.timeout(60000) }
-    );
-    if (resp.ok) {
-      const text = await resp.text();
-      const parsed = extractJSON(text);
-      if (parsed && parsed.stops && parsed.stops.length) {
-        parsed.stops = parsed.stops.filter(s => s.lat && s.lng && !isNaN(+s.lat) && !isNaN(+s.lng));
-        if (parsed.stops.length) return parsed;
-      }
-    }
-  } catch(e) { console.warn('Attempt 2 failed:', e.message); }
-
-  // ── ATTEMPT 3: POST to text.pollinations.ai/ (legacy endpoint)
-  try {
-    status('Trying fallback AI...');
-    const resp = await fetch('https://text.pollinations.ai/', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        messages: [
-          { role: 'system', content: systemMsg },
-          { role: 'user', content: userMsg }
-        ],
-        model: 'openai',
-        jsonMode: true,
-        seed: Math.floor(Math.random() * 99999)
-      }),
-      signal: AbortSignal.timeout(60000)
-    });
-    if (resp.ok) {
-      const text = await resp.text();
-      const parsed = extractJSON(text);
-      if (parsed && parsed.stops && parsed.stops.length) {
-        parsed.stops = parsed.stops.filter(s => s.lat && s.lng && !isNaN(+s.lat) && !isNaN(+s.lng));
-        if (parsed.stops.length) return parsed;
-      }
-    }
-  } catch(e) { console.warn('Attempt 3 failed:', e.message); }
-
-  throw new Error('All AI endpoints failed. Check your internet connection and try again.');
+  throw new Error('All AI backends failed. Please check your internet connection and try again in a moment.');
 }
 
 function extractJSON(text){
